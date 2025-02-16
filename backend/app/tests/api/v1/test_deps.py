@@ -6,9 +6,8 @@ import jwt
 import pytest
 from fastapi import HTTPException
 from sqlmodel import Session
-from pydantic import ValidationError
 
-from app.api.v1.deps import get_current_user, get_current_active_superuser
+from app.api.v1.deps import get_current_active_superuser, get_current_user
 from app.core.config import settings
 from app.core.security import ALGORITHM, create_access_token
 from app.models.user import User
@@ -26,7 +25,7 @@ def active_user():
         email="test@example.com",
         hashed_password="hashed",
         is_active=True,
-        is_superuser=False
+        is_superuser=False,
     )
 
 
@@ -37,7 +36,7 @@ def superuser():
         email="admin@example.com",
         hashed_password="hashed",
         is_active=True,
-        is_superuser=True
+        is_superuser=True,
     )
 
 
@@ -48,15 +47,14 @@ def inactive_user():
         email="inactive@example.com",
         hashed_password="hashed",
         is_active=False,
-        is_superuser=False
+        is_superuser=False,
     )
 
 
 def test_get_current_user_valid_token(mock_session, active_user):
     # Подготовка
     token = create_access_token(
-        subject=str(active_user.id),
-        expires_delta=timedelta(minutes=15)
+        subject=str(active_user.id), expires_delta=timedelta(minutes=15)
     )
     mock_session.get.return_value = active_user
 
@@ -99,9 +97,11 @@ def test_get_current_user_invalid_token_payload(mock_session):
     # Создаем токен с payload, который вызовет ValidationError при десериализации в TokenPayload
     invalid_payload = {
         "exp": datetime.now(timezone.utc) + timedelta(minutes=15),
-        "sub": {"invalid": "format"}  # TokenPayload ожидает str, но получает dict
+        "sub": {"invalid": "format"},  # TokenPayload ожидает str, но получает dict
     }
-    invalid_token = jwt.encode(invalid_payload, settings.SECRET_KEY, algorithm=ALGORITHM)
+    invalid_token = jwt.encode(
+        invalid_payload, settings.SECRET_KEY, algorithm=ALGORITHM
+    )
 
     # Проверка
     with pytest.raises(HTTPException) as exc_info:
@@ -114,8 +114,7 @@ def test_get_current_user_invalid_token_payload(mock_session):
 def test_get_current_user_user_not_found(mock_session):
     # Подготовка
     token = create_access_token(
-        subject="nonexistent_user_id",
-        expires_delta=timedelta(minutes=15)
+        subject="nonexistent_user_id", expires_delta=timedelta(minutes=15)
     )
     mock_session.get.return_value = None
 
@@ -130,8 +129,7 @@ def test_get_current_user_user_not_found(mock_session):
 def test_get_current_user_inactive_user(mock_session, inactive_user):
     # Подготовка
     token = create_access_token(
-        subject=str(inactive_user.id),
-        expires_delta=timedelta(minutes=15)
+        subject=str(inactive_user.id), expires_delta=timedelta(minutes=15)
     )
     mock_session.get.return_value = inactive_user
 

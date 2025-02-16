@@ -1,10 +1,10 @@
 from collections.abc import Generator
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlmodel import Session, delete
-from unittest.mock import patch
 from pydantic_settings import BaseSettings
+from sqlmodel import Session, delete
 
 from app.core.config import settings
 from app.core.db import engine, init_db
@@ -25,7 +25,7 @@ class MockSettings(BaseSettings):
     FIRST_SUPERUSER: str = "admin@example.com"
     FIRST_SUPERUSER_PASSWORD: str = "admin"
     USERS_OPEN_REGISTRATION: bool = True
-    
+
     # Добавляем SMTP настройки
     SMTP_TLS: bool = True
     SMTP_PORT: int = 587
