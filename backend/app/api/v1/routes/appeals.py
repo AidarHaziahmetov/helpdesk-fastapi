@@ -1,8 +1,8 @@
 from pathlib import Path
-from typing import Any, List
+from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, Depends
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from app.api.v1.deps import CurrentUser, SessionDep
@@ -17,7 +17,7 @@ from app.utils.email import send_new_appeal_email, send_new_status_email
 router = APIRouter(prefix="/appeals", tags=["appeals"])
 
 
-@router.get("/", response_model=List[Appeal])
+@router.get("/", response_model=list[Appeal])
 def get_appeals(
     session: SessionDep,
     current_user: CurrentUser,
@@ -57,10 +57,12 @@ def create_appeal(
     session: SessionDep,
     current_user: CurrentUser,
     appeal_in: AppealBase,
-    files: List[UploadFile] | None = File(default=None, description="Опциональные файлы"),
+    files: list[UploadFile] | None = File(
+        default=None, description="Опциональные файлы"
+    ),
 ) -> Any:
     """Создать новое обращение
-    
+
     - **files**: Опциональные файлы для загрузки
     """
     if not hasattr(current_user, "representative"):
@@ -147,10 +149,10 @@ def upload_appeal_files(
     session: SessionDep,
     current_user: CurrentUser,
     appeal_id: UUID,
-    files: List[UploadFile] = File(default=..., description="Файлы для загрузки"),
+    files: list[UploadFile] = File(default=..., description="Файлы для загрузки"),
 ) -> list[AppealFile]:
     """Загрузить файлы для обращения
-    
+
     - **files**: Один или несколько файлов для загрузки
     """
     # Проверяем существование обращения
@@ -238,7 +240,7 @@ def delete_appeal(
 ) -> None:
     """
     Удалить обращение
-    
+
     Только суперпользователи или создатель обращения могут его удалить.
     При удалении также удаляются все связанные файлы.
     """

@@ -1,7 +1,7 @@
 from app.models.appeal import Appeal
 
 
-def send_new_appeal_message(appeal: Appeal) -> None:
+def send_new_appeal_message(_: Appeal) -> None:
     """
     Заглушка для отправки сообщения о новом обращении в бот
 
@@ -11,7 +11,7 @@ def send_new_appeal_message(appeal: Appeal) -> None:
     pass
 
 
-def send_appeal_updated_message(appeal: Appeal) -> None:
+def send_appeal_updated_message(_: Appeal) -> None:
     """
     Заглушка для отправки сообщения об обновлении обращения в бот
 

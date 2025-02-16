@@ -1,7 +1,7 @@
 """Add models for Helpdesk
 
 Revision ID: 918534d35f42
-Revises: 
+Revises:
 Create Date: 2025-02-15 16:42:39.657139
 
 """
