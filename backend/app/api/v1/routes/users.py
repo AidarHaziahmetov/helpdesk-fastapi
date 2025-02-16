@@ -41,12 +41,11 @@ def read_users(session: SessionDep, skip: int = 0, limit: int = 100) -> Any:
     """
     Retrieve users.
     """
-
     count_statement = select(func.count()).select_from(User)
-    count = session.exec(count_statement).one()
+    count = session.scalar(count_statement)
 
     statement = select(User).offset(skip).limit(limit)
-    users = session.exec(statement).all()
+    users = session.exec(statement).scalars().all()
 
     return UsersPublic(data=users, count=count)
 

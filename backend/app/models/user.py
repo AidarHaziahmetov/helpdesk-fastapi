@@ -37,6 +37,7 @@ class UserRegister(SQLModel):
 # Properties to receive via API on update, all are optional
 class UserUpdate(SQLModel):
     email: str | None = None
+    full_name: str | None = None
     first_name: str | None = None
     last_name: str | None = None
     password: str | None = None
