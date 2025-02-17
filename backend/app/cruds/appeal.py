@@ -1,12 +1,13 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from uuid import UUID
 
-from fastapi import UploadFile
+from fastapi import HTTPException, UploadFile
 from sqlmodel import Session, select
 
 from app.core.files import save_upload_file
 from app.models.appeal import Appeal, AppealBase
 from app.models.appeal_file import AppealFile
+from app.models.appeal_status import AppealStatus
 from app.models.representative import Representative
 from app.models.user import User
 
@@ -19,13 +20,28 @@ def create_appeal(
     files: list[UploadFile] | None = None,
 ) -> Appeal:
     """Создание обращения"""
-    db_appeal = Appeal.model_validate(
-        appeal,
-        update={
-            "user_id": user.id,
-            "region_id": user.representative.organization.region_id,
-            "dt": datetime.now(timezone.utc),
-        },
+    if not user.representative or not user.representative.organization:
+        raise HTTPException(
+            status_code=400,
+            detail="User must be a representative with an organization to create appeals",
+        )
+
+    # Получаем начальный статус из базы
+    initial_status = session.exec(
+        select(AppealStatus).where(AppealStatus.name == "Новое")
+    ).first()
+    if not initial_status:
+        raise HTTPException(
+            status_code=500,
+            detail="Initial appeal status not found",
+        )
+
+    appeal_data = appeal.model_dump()
+    db_appeal = Appeal(
+        **appeal_data,
+        user_id=user.id,
+        region_id=user.representative.organization.region_id,
+        status_id=initial_status.id,  # Используем ID найденного статуса
     )
 
     session.add(db_appeal)

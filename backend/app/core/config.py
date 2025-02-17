@@ -1,6 +1,7 @@
 import secrets
 import warnings
 from typing import Annotated, Any, Literal
+from uuid import UUID
 
 from pydantic import (
     AnyUrl,
@@ -96,6 +97,11 @@ class Settings(BaseSettings):
     # TODO: update type to EmailStr when sqlmodel supports it
     FIRST_SUPERUSER: str
     FIRST_SUPERUSER_PASSWORD: str
+
+    # Appeal settings
+    DEFAULT_APPEAL_STATUS_ID: UUID = UUID(
+        "00000000-0000-0000-0000-000000000001"
+    )  # ID статуса "Новое" или другого начального статуса
 
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
         if value == "changethis":

@@ -57,21 +57,29 @@ def create_appeal(
     session: SessionDep,
     current_user: CurrentUser,
     appeal_in: AppealBase,
-    files: list[UploadFile] | None = File(
-        default=None, description="Опциональные файлы"
-    ),
+    # files: list[UploadFile] = File(None),
 ) -> Any:
     """Создать новое обращение
 
     - **files**: Опциональные файлы для загрузки
     """
+    # try:
+    #     appeal_data = json.loads(appeal_in)
+    #     appeal_in = AppealBase(**appeal_data)
+    # except json.JSONDecodeError:
+    #     raise HTTPException(status_code=422, detail="Invalid JSON format in appeal_in")
+    # except ValueError as e:
+    #     raise HTTPException(status_code=422, detail=f"Invalid appeal data: {str(e)}")
+
     if not hasattr(current_user, "representative"):
         raise HTTPException(
             status_code=403, detail="Only representatives can create appeals"
         )
 
     appeal = appeal_crud.create_appeal(
-        session=session, user=current_user, appeal=appeal_in, files=files
+        session=session,
+        user=current_user,
+        appeal=appeal_in,  # , files=files
     )
 
     # Отправка уведомлений
