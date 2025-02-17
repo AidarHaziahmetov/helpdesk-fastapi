@@ -5,6 +5,14 @@ from .appeal import (
     get_appeals,
     update_appeal,
 )
+from .appeal_status import (
+    create_appeal_status,
+    delete_appeal_status,
+    get_appeal_status,
+    get_appeal_status_by_name,
+    get_appeal_statuses,
+    update_appeal_status,
+)
 from .organization import (
     create_organization,
     delete_organization,
@@ -70,4 +78,10 @@ __all__ = [
     "get_region_by_code",
     "update_region",
     "delete_region",
+    "create_appeal_status",
+    "get_appeal_status",
+    "get_appeal_statuses",
+    "get_appeal_status_by_name",
+    "update_appeal_status",
+    "delete_appeal_status",
 ]

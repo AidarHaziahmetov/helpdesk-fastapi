@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block content %}
+<p>Здравствуйте!</p>
+
+<p>В системе {{ project_name }} создано новое обращение:</p>
+
+<ul>
+  <li><strong>ID:</strong> {{ appeal_id }}</li>
+  <li><strong>Тема:</strong> {{ appeal_title }}</li>
+  <li><strong>Организация:</strong> {{ organization_name }}</li>
+  <li><strong>Дата создания:</strong> {{ created_at.strftime('%d.%m.%Y %H:%M') }}</li>
+</ul>
+
+<p><strong>Описание:</strong></p>
+<p>{{ appeal_description }}</p>
+
+<p>
+  <a href="{{ link }}" class="button">Перейти к обращению</a>
+</p>
+
+<p>С уважением,<br>
+Команда {{ project_name }}</p>
+{% endblock %}

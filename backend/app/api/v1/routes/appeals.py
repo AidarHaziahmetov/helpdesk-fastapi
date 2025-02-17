@@ -63,14 +63,6 @@ def create_appeal(
 
     - **files**: Опциональные файлы для загрузки
     """
-    # try:
-    #     appeal_data = json.loads(appeal_in)
-    #     appeal_in = AppealBase(**appeal_data)
-    # except json.JSONDecodeError:
-    #     raise HTTPException(status_code=422, detail="Invalid JSON format in appeal_in")
-    # except ValueError as e:
-    #     raise HTTPException(status_code=422, detail=f"Invalid appeal data: {str(e)}")
-
     if not hasattr(current_user, "representative"):
         raise HTTPException(
             status_code=403, detail="Only representatives can create appeals"
@@ -83,7 +75,10 @@ def create_appeal(
     )
 
     # Отправка уведомлений
-    send_new_appeal_email(appeal)
+    send_new_appeal_email(
+        appeal=appeal,
+        organization=current_user.representative.organization,
+    )
     send_new_appeal_message(appeal)
 
     return appeal

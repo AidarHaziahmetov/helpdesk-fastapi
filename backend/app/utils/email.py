@@ -9,7 +9,7 @@ from jinja2 import Template
 
 from app.core.config import settings
 from app.models.appeal import Appeal
-from app.models.user import User
+from app.models.organization import Organization
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -99,20 +99,40 @@ def generate_new_account_email(
     return EmailData(html_content=html_content, subject=subject)
 
 
-def send_new_appeal_email(
-    background_tasks: BackgroundTasks,
-    appeal: Appeal,
-    responsible_user: User | None = None,
-) -> None:
+def send_new_appeal_email(*, appeal: Appeal, organization: Organization) -> None:
     """
-    Отправляет email о новом обращении
+    Отправка email о новом обращении
     """
     if not settings.emails_enabled:
         return
 
-    # Используем background_tasks для асинхронной отправки
-    message = f"[MOCK] Отправка email о новом обращении {appeal.id} пользователю {responsible_user.email if responsible_user else 'всем'}"
-    background_tasks.add_task(print, message)
+    project_name = settings.PROJECT_NAME
+    subject = f"{project_name} - Новое обращение #{appeal.id}"
+
+    # Формируем контекст для шаблона
+    context = {
+        "project_name": project_name,
+        "appeal_id": appeal.id,
+        "appeal_title": appeal.title,
+        "appeal_description": appeal.description,
+        "organization_name": organization.name,
+        "created_at": appeal.created_at,
+        "link": f"{settings.FRONTEND_HOST}/appeals/{appeal.id}",
+    }
+
+    # Рендерим HTML из шаблона
+    html_content = render_email_template(
+        template_name="new_appeal.html",
+        context=context,
+    )
+
+    # Отправляем email
+    if organization.email:
+        send_email(
+            email_to=organization.email,
+            subject=subject,
+            html_content=html_content,
+        )
 
 
 def send_new_status_email(
