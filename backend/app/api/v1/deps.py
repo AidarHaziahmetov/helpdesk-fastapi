@@ -1,4 +1,4 @@
-from collections.abc import Generator
+from collections.abc import AsyncGenerator, Generator
 from typing import Annotated
 
 import jwt
@@ -7,10 +7,11 @@ from fastapi.security import OAuth2PasswordBearer
 from jwt.exceptions import InvalidTokenError
 from pydantic import ValidationError
 from sqlmodel import Session
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core import security
 from app.core.config import settings
-from app.core.db import engine
+from app.core.db import async_engine, engine
 from app.models.auth import TokenPayload
 from app.models.user import User
 
@@ -56,3 +57,11 @@ def get_current_active_superuser(current_user: CurrentUser) -> User:
             status_code=403, detail="The user doesn't have enough privileges"
         )
     return current_user
+
+
+async def get_async_db() -> AsyncGenerator[AsyncSession, None]:
+    async with AsyncSession(async_engine) as session:
+        yield session
+
+
+AsyncSessionDep = Annotated[AsyncSession, Depends(get_async_db)]
