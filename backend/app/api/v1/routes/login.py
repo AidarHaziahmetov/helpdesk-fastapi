@@ -5,11 +5,15 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.security import OAuth2PasswordRequestForm
 
-from app.api.v1.deps import CurrentUser, SessionDep, get_current_active_superuser
+from app.api.v1.deps import (
+    AsyncSessionDep,
+    CurrentUserAsync,
+    get_current_active_superuser,
+)
 from app.core import security
 from app.core.config import settings
 from app.core.security import get_password_hash
-from app.cruds.user import authenticate, get_user_by_email
+from app.cruds.user import authenticate_async, get_user_by_email_async
 from app.models.auth import NewPassword, Token
 from app.models.common import Message
 from app.models.user import UserPublic
@@ -24,13 +28,13 @@ router = APIRouter(tags=["login"])
 
 
 @router.post("/login/access-token")
-def login_access_token(
-    session: SessionDep, form_data: Annotated[OAuth2PasswordRequestForm, Depends()]
+async def login_access_token(
+    session: AsyncSessionDep, form_data: Annotated[OAuth2PasswordRequestForm, Depends()]
 ) -> Token:
     """
     OAuth2 compatible token login, get an access token for future requests
     """
-    user = authenticate(
+    user = await authenticate_async(
         session=session, email=form_data.username, password=form_data.password
     )
     if not user:
@@ -38,15 +42,17 @@ def login_access_token(
     elif not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    return Token(
+    token = Token(
         access_token=security.create_access_token(
             user.id, expires_delta=access_token_expires
         )
     )
+    print(token)
+    return token
 
 
 @router.post("/login/test-token", response_model=UserPublic)
-def test_token(current_user: CurrentUser) -> Any:
+def test_token(current_user: CurrentUserAsync) -> Any:
     """
     Test access token
     """
@@ -54,11 +60,11 @@ def test_token(current_user: CurrentUser) -> Any:
 
 
 @router.post("/password-recovery/{email}")
-def recover_password(email: str, session: SessionDep) -> Message:
+async def recover_password(email: str, session: AsyncSessionDep) -> Message:
     """
     Password Recovery
     """
-    user = get_user_by_email(session=session, email=email)
+    user = await get_user_by_email_async(session=session, email=email)
 
     if not user:
         raise HTTPException(
@@ -78,14 +84,14 @@ def recover_password(email: str, session: SessionDep) -> Message:
 
 
 @router.post("/reset-password/")
-def reset_password(session: SessionDep, body: NewPassword) -> Message:
+async def reset_password(session: AsyncSessionDep, body: NewPassword) -> Message:
     """
     Reset password
     """
     email = verify_password_reset_token(token=body.token)
     if not email:
         raise HTTPException(status_code=400, detail="Invalid token")
-    user = get_user_by_email(session=session, email=email)
+    user = await get_user_by_email_async(session=session, email=email)
     if not user:
         raise HTTPException(
             status_code=404,
@@ -96,7 +102,7 @@ def reset_password(session: SessionDep, body: NewPassword) -> Message:
     hashed_password = get_password_hash(password=body.new_password)
     user.hashed_password = hashed_password
     session.add(user)
-    session.commit()
+    await session.commit()
     return Message(message="Password updated successfully")
 
 
@@ -105,11 +111,11 @@ def reset_password(session: SessionDep, body: NewPassword) -> Message:
     dependencies=[Depends(get_current_active_superuser)],
     response_class=HTMLResponse,
 )
-def recover_password_html_content(email: str, session: SessionDep) -> Any:
+async def recover_password_html_content(email: str, session: AsyncSessionDep) -> Any:
     """
     HTML Content for Password Recovery
     """
-    user = get_user_by_email(session=session, email=email)
+    user = await get_user_by_email_async(session=session, email=email)
 
     if not user:
         raise HTTPException(

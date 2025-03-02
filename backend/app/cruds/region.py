@@ -190,7 +190,7 @@ async def get_regions_async(
     """Асинхронное получение списка регионов"""
     statement = select(Region).offset(skip).limit(limit)
     result = await session.exec(statement)
-    return await result.all()
+    return result.all()
 
 
 async def update_region_async(
@@ -263,7 +263,7 @@ async def get_region_by_name_async(
     """Асинхронное получение региона по названию"""
     statement = select(Region).where(Region.name == name)
     result = await session.exec(statement)
-    return await result.first()
+    return result.first()
 
 
 async def get_region_by_code_async(
@@ -274,4 +274,4 @@ async def get_region_by_code_async(
     """Асинхронное получение региона по коду"""
     statement = select(Region).where(Region.code == code)
     result = await session.exec(statement)
-    return await result.first()
+    return result.first()

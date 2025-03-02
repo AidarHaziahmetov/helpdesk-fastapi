@@ -14,7 +14,7 @@ from app.cruds.appeal_status import (
 from app.models.appeal_status import AppealStatus, AppealStatusBase
 from app.models.common import Message
 
-router = APIRouter(prefix="/appeal-statuses", tags=["appeal statuses"])
+router = APIRouter(prefix="/appeal-statuses", tags=["appeals"])
 
 
 @router.get("/", response_model=list[AppealStatus])

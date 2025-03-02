@@ -15,7 +15,7 @@ from app.cruds.task import (
 from app.models.task import Task, TaskBase
 from app.models.user import User
 
-router = APIRouter()
+router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 
 @router.post("/", response_model=Task)

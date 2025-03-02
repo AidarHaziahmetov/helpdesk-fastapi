@@ -16,7 +16,7 @@ from app.cruds.contract import (
 from app.models.contract import Contract, ContractCreate, ContractUpdate
 from app.models.user import User
 
-router = APIRouter()
+router = APIRouter(prefix="/contracts", tags=["contracts"])
 
 
 @router.post("/", response_model=Contract)

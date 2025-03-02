@@ -8,7 +8,7 @@ from app.api.v1.deps import SessionDep, get_current_user
 from app.models.user import User
 from app.utils.reports import generate_organization_report
 
-router = APIRouter()
+router = APIRouter(prefix="/reports", tags=["reports"])
 
 
 @router.get("/organization/{organization_id}")
