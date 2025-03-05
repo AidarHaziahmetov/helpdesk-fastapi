@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import HTTPException, UploadFile
 from sqlmodel import Session, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.files import save_upload_file
 from app.models.appeal import Appeal, AppealBase
@@ -166,3 +167,111 @@ def delete_appeal(*, session: Session, appeal_id: UUID) -> None:
 #             )
 
 #     return paginate_query(session, query, pagination)
+
+
+# Асинхронные версии функций
+
+
+async def create_appeal_async(
+    *,
+    session: AsyncSession,
+    user: User,
+    appeal: AppealBase,
+    files: list[UploadFile] | None = None,
+) -> Appeal:
+    """Асинхронное создание обращения"""
+    db_appeal = Appeal(
+        **appeal.model_dump(),
+        user_id=user.id,
+        created_at=datetime.utcnow(),
+    )
+    session.add(db_appeal)
+    await session.commit()
+    await session.refresh(db_appeal)
+
+    # Сохраняем файлы, если они есть
+    if files:
+        for file in files:
+            # Сохраняем файл и получаем путь
+            file_path = save_upload_file(
+                file=file,
+                folder="appeal",
+                entity_id=db_appeal.id,
+            )
+
+            # Создаем запись в БД
+            appeal_file = AppealFile(
+                appeal_id=db_appeal.id,
+                file=file_path,
+            )
+            session.add(appeal_file)
+
+        await session.commit()
+        await session.refresh(db_appeal)
+
+    return db_appeal
+
+
+async def get_appeal_async(
+    *,
+    session: AsyncSession,
+    appeal_id: UUID,
+) -> Appeal | None:
+    """Асинхронное получение обращения по ID"""
+    return await session.get(Appeal, appeal_id)
+
+
+async def get_appeals_async(
+    *,
+    session: AsyncSession,
+    user: User,
+    skip: int = 0,
+    limit: int = 100,
+) -> list[Appeal]:
+    """Асинхронное получение списка обращений"""
+    query = select(Appeal)
+
+    if not user.is_superuser:
+        if hasattr(user, "representative"):
+            query = query.where(
+                Appeal.organization_id == user.representative.organization_id
+            )
+        else:
+            query = query.where(Appeal.user_id == user.id)
+
+    query = query.offset(skip).limit(limit)
+    result = await session.exec(query)
+    return result.all()
+
+
+async def update_appeal_async(
+    *,
+    session: AsyncSession,
+    db_appeal: Appeal,
+    appeal_in: AppealBase,
+) -> Appeal:
+    """Асинхронное обновление обращения"""
+    update_data = appeal_in.model_dump(exclude_unset=True)
+    db_appeal.sqlmodel_update(update_data)
+
+    session.add(db_appeal)
+    await session.commit()
+    await session.refresh(db_appeal)
+    return db_appeal
+
+
+async def delete_appeal_async(
+    *,
+    session: AsyncSession,
+    appeal_id: UUID,
+) -> None:
+    """Асинхронное удаление обращения"""
+    appeal = await session.get(Appeal, appeal_id)
+    if not appeal:
+        raise HTTPException(
+            status_code=404,
+            detail="Appeal not found",
+        )
+
+    await session.delete(appeal)
+    await session.commit()

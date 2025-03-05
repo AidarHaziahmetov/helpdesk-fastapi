@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
@@ -9,8 +9,19 @@ if TYPE_CHECKING:
 
 
 class AppealStopIntervalBase(SQLModel):
-    start_date: datetime = Field(default_factory=datetime.utcnow)
-    end_date: datetime | None = None
+    start_dt: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    end_dt: datetime | None = None
+    description: str | None = None
+
+
+class AppealStopIntervalCreate(AppealStopIntervalBase):
+    pass
+
+
+class AppealStopIntervalUpdate(SQLModel):
+    start_dt: datetime | None = None
+    end_dt: datetime | None = None
+    description: str | None = None
 
 
 class AppealStopInterval(AppealStopIntervalBase, table=True):
@@ -21,9 +32,9 @@ class AppealStopInterval(AppealStopIntervalBase, table=True):
     appeal: "Appeal" = Relationship(back_populates="stop_intervals")
 
     def __str__(self) -> str:
-        return f"{self.appeal}: {self.start_date} - {self.end_date or '...'}"
+        return f"{self.appeal}: {self.start_dt} - {self.end_dt or '...'}"
 
-    def get_duration_dates(self) -> timedelta:
-        if self.end_date:
-            return self.end_date - self.start_date
+    def get_duration(self) -> timedelta:
+        if self.end_dt:
+            return self.end_dt - self.start_dt
         return timedelta()

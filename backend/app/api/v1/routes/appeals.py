@@ -2,15 +2,21 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-from app.api.v1.deps import CurrentUser, SessionDep
+from app.api.v1.deps import AsyncSessionDep, CurrentUserAsync
 from app.core.config import settings
 from app.core.files import get_file_response, save_upload_file
-from app.cruds import appeal as appeal_crud
+from app.cruds.appeal import (
+    create_appeal_async,
+    delete_appeal_async,
+    get_appeal_async,
+    get_appeals_async,
+    update_appeal_async,
+)
 from app.models.appeal import Appeal, AppealBase
 from app.models.appeal_file import AppealFile
+from app.models.common import Message
 from app.utils.bot import send_appeal_updated_message, send_new_appeal_message
 from app.utils.email import send_new_appeal_email, send_new_status_email
 
@@ -18,156 +24,192 @@ router = APIRouter(prefix="/appeals", tags=["appeals"])
 
 
 @router.get("/", response_model=list[Appeal])
-def get_appeals(
-    session: SessionDep,
-    current_user: CurrentUser,
+async def read_appeals(
+    *,
+    session: AsyncSessionDep,
+    current_user: CurrentUserAsync,
     skip: int = 0,
     limit: int = 100,
 ) -> Any:
-    """Получить список обращений"""
-    appeals = appeal_crud.get_appeals(
+    """
+    Получить список обращений.
+
+    - Обычные пользователи видят только свои обращения
+    - Представители организаций видят обращения своей организации
+    - Суперпользователи видят все обращения
+    """
+    appeals = await get_appeals_async(
         session=session, user=current_user, skip=skip, limit=limit
     )
     return appeals
 
 
 @router.get("/{appeal_id}", response_model=Appeal)
-def get_appeal(
+async def get_appeal(
     appeal_id: UUID,
-    session: SessionDep,
-    current_user: CurrentUser,
+    session: AsyncSessionDep,
+    current_user: CurrentUserAsync,
 ) -> Any:
     """Получить обращение по ID"""
-    appeal = appeal_crud.get_appeal(session=session, appeal_id=appeal_id)
+    appeal = await get_appeal_async(session=session, appeal_id=appeal_id)
     if not appeal:
         raise HTTPException(status_code=404, detail="Appeal not found")
 
     # Проверка прав доступа
     if not current_user.is_superuser:
         if hasattr(current_user, "representative"):
-            if appeal.user_id != current_user.id:
+            if appeal.organization_id != current_user.representative.organization_id:
                 raise HTTPException(status_code=403, detail="Not enough permissions")
+        elif appeal.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not enough permissions")
 
     return appeal
 
 
 @router.post("/", response_model=Appeal)
-def create_appeal(
+async def create_new_appeal(
     *,
-    session: SessionDep,
-    current_user: CurrentUser,
-    appeal_in: AppealBase,
+    session: AsyncSessionDep,
+    current_user: CurrentUserAsync,
+    appeal_in: str = Form(...),
     # files: list[UploadFile] = File(None),
 ) -> Any:
-    """Создать новое обращение
-
-    - **files**: Опциональные файлы для загрузки
     """
-    if not hasattr(current_user, "representative"):
-        raise HTTPException(
-            status_code=403, detail="Only representatives can create appeals"
-        )
+    Создать новое обращение.
+    """
+    # Добавлено: преобразование JSON-строки в объект AppealBase
+    try:
+        appeal_data = AppealBase.model_validate_json(appeal_in)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Invalid appeal data") from e
 
-    appeal = appeal_crud.create_appeal(
+    # Создаем обращение используя распарсенные данные
+    appeal = await create_appeal_async(
         session=session,
         user=current_user,
-        appeal=appeal_in,  # , files=files
+        appeal=appeal_data,
     )
 
-    # Отправка уведомлений
-    send_new_appeal_email(
-        appeal=appeal,
-        organization=current_user.representative.organization,
-    )
-    send_new_appeal_message(appeal)
+    # Отправляем уведомления
+    try:
+        await send_new_appeal_email(appeal=appeal)
+    except Exception as e:
+        # Логируем ошибку, но не прерываем выполнение
+        print(f"Error sending email: {e}")
+
+    try:
+        await send_new_appeal_message(appeal=appeal)
+    except Exception as e:
+        # Логируем ошибку, но не прерываем выполнение
+        print(f"Error sending message: {e}")
+
+    # Загружаем файлы
+    # if files:
+    #     for file in files:
+    #         await upload_appeal_files(
+    #             session=session,
+    #             current_user=current_user,
+    #             appeal_id=appeal.id,
+    #             file=file,
+    #         )
 
     return appeal
 
 
 @router.patch("/{appeal_id}", response_model=Appeal)
-def update_appeal(
+async def update_appeal(
     *,
-    session: SessionDep,
-    current_user: CurrentUser,
+    session: AsyncSessionDep,
+    current_user: CurrentUserAsync,
     appeal_id: UUID,
     status_id: UUID | None = None,
     responsible_user_id: UUID | None = None,
     solving: str | None = None,
 ) -> Any:
     """Обновить обращение"""
-    appeal = appeal_crud.get_appeal(session=session, appeal_id=appeal_id)
+    appeal = await get_appeal_async(session=session, appeal_id=appeal_id)
     if not appeal:
         raise HTTPException(status_code=404, detail="Appeal not found")
 
     # Проверка прав на обновление
-    if not (current_user.is_superuser or appeal.user_id == current_user.id):
-        raise HTTPException(status_code=403, detail="Not enough permissions")
+    if not current_user.is_superuser:
+        if hasattr(current_user, "representative"):
+            if appeal.organization_id != current_user.representative.organization_id:
+                raise HTTPException(status_code=403, detail="Not enough permissions")
+        elif appeal.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not enough permissions")
 
     old_status = appeal.status_id
-    updated_appeal = appeal_crud.update_appeal(
+    updated_appeal = await update_appeal_async(
         session=session,
         db_appeal=appeal,
-        status_id=status_id,
-        responsible_user_id=responsible_user_id,
-        solving=solving,
+        appeal_in=AppealBase(
+            status_id=status_id,
+            responsible_user_id=responsible_user_id,
+            solving=solving,
+        ),
     )
 
     if status_id and status_id != old_status:
-        send_new_status_email(updated_appeal)
-        send_appeal_updated_message(updated_appeal)
+        await send_new_status_email(updated_appeal)
+        await send_appeal_updated_message(updated_appeal)
 
     return updated_appeal
 
 
 @router.get("/{appeal_id}/files/{file_id}")
-def get_appeal_file(
+async def get_appeal_file(
     appeal_id: UUID,
     file_id: UUID,
-    session: SessionDep,
-    current_user: CurrentUser,
-) -> FileResponse:
+    session: AsyncSessionDep,
+    current_user: CurrentUserAsync,
+) -> Any:
     """Получить файл обращения"""
     # Проверяем существование обращения
-    appeal = appeal_crud.get_appeal(session=session, appeal_id=appeal_id)
+    appeal = await get_appeal_async(session=session, appeal_id=appeal_id)
     if not appeal:
         raise HTTPException(status_code=404, detail="Appeal not found")
 
     # Проверяем права доступа
     if not current_user.is_superuser:
         if hasattr(current_user, "representative"):
-            if appeal.user_id != current_user.id:
+            if appeal.organization_id != current_user.representative.organization_id:
                 raise HTTPException(status_code=403, detail="Not enough permissions")
+        elif appeal.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not enough permissions")
 
     # Получаем файл
-    appeal_file = session.get(AppealFile, file_id)
+    appeal_file = await session.get(AppealFile, file_id)
     if not appeal_file or appeal_file.appeal_id != appeal_id:
         raise HTTPException(status_code=404, detail="File not found")
 
-    return get_file_response(file_path=appeal_file.file)
+    return await get_file_response(file_path=appeal_file.file)
 
 
 @router.post("/{appeal_id}/files")
-def upload_appeal_files(
+async def upload_appeal_files(
     *,
-    session: SessionDep,
-    current_user: CurrentUser,
+    session: AsyncSessionDep,
+    current_user: CurrentUserAsync,
     appeal_id: UUID,
-    files: list[UploadFile] = File(default=..., description="Файлы для загрузки"),
+    files: list[UploadFile] = File(...),  # noqa: UP006
 ) -> list[AppealFile]:
     """Загрузить файлы для обращения
 
     - **files**: Один или несколько файлов для загрузки
     """
     # Проверяем существование обращения
-    appeal = appeal_crud.get_appeal(session=session, appeal_id=appeal_id)
+    appeal = await get_appeal_async(session=session, appeal_id=appeal_id)
     if not appeal:
         raise HTTPException(status_code=404, detail="Appeal not found")
 
     # Проверяем права доступа
     if not current_user.is_superuser:
         if hasattr(current_user, "representative"):
-            if appeal.user_id != current_user.id:
+            if appeal.organization_id != current_user.representative.organization_id:
                 raise HTTPException(status_code=403, detail="Not enough permissions")
+        elif appeal.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not enough permissions")
 
     appeal_files = []
     for file in files:
@@ -193,34 +235,36 @@ def upload_appeal_files(
         session.add(appeal_file)
         appeal_files.append(appeal_file)
 
-    session.commit()
+    await session.commit()
     for file in appeal_files:
-        session.refresh(file)
+        await session.refresh(file)
 
     return appeal_files
 
 
 @router.delete("/{appeal_id}/files/{file_id}")
-def delete_appeal_file(
+async def delete_appeal_file(
     appeal_id: UUID,
     file_id: UUID,
-    session: SessionDep,
-    current_user: CurrentUser,
+    session: AsyncSessionDep,
+    current_user: CurrentUserAsync,
 ) -> None:
     """Удалить файл обращения"""
     # Проверяем существование обращения
-    appeal = appeal_crud.get_appeal(session=session, appeal_id=appeal_id)
+    appeal = await get_appeal_async(session=session, appeal_id=appeal_id)
     if not appeal:
         raise HTTPException(status_code=404, detail="Appeal not found")
 
     # Проверяем права доступа
     if not current_user.is_superuser:
         if hasattr(current_user, "representative"):
-            if appeal.user_id != current_user.id:
+            if appeal.organization_id != current_user.representative.organization_id:
                 raise HTTPException(status_code=403, detail="Not enough permissions")
+        elif appeal.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not enough permissions")
 
     # Получаем файл
-    appeal_file = session.get(AppealFile, file_id)
+    appeal_file = await session.get(AppealFile, file_id)
     if not appeal_file or appeal_file.appeal_id != appeal_id:
         raise HTTPException(status_code=404, detail="File not found")
 
@@ -230,17 +274,17 @@ def delete_appeal_file(
         file_path.unlink()
 
     # Удаляем запись из БД
-    session.delete(appeal_file)
-    session.commit()
+    await session.delete(appeal_file)
+    await session.commit()
 
 
 @router.delete("/{appeal_id}")
-def delete_appeal(
+async def delete_appeal(
     *,
-    session: SessionDep,
-    current_user: CurrentUser,
+    session: AsyncSessionDep,
+    current_user: CurrentUserAsync,
     appeal_id: UUID,
-) -> None:
+) -> Message:
     """
     Удалить обращение
 
@@ -248,13 +292,17 @@ def delete_appeal(
     При удалении также удаляются все связанные файлы.
     """
     # Проверяем существование обращения
-    appeal = appeal_crud.get_appeal(session=session, appeal_id=appeal_id)
+    appeal = await get_appeal_async(session=session, appeal_id=appeal_id)
     if not appeal:
         raise HTTPException(status_code=404, detail="Appeal not found")
 
     # Проверяем права доступа
-    if not (current_user.is_superuser or appeal.user_id == current_user.id):
-        raise HTTPException(status_code=403, detail="Not enough permissions")
+    if not current_user.is_superuser:
+        if hasattr(current_user, "representative"):
+            if appeal.organization_id != current_user.representative.organization_id:
+                raise HTTPException(status_code=403, detail="Not enough permissions")
+        elif appeal.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not enough permissions")
 
     # Удаляем физические файлы
     for appeal_file in appeal.files:
@@ -263,5 +311,5 @@ def delete_appeal(
             file_path.unlink()
 
     # Удаляем обращение (каскадно удалятся все связанные записи)
-    session.delete(appeal)
-    session.commit()
+    await delete_appeal_async(session=session, appeal_id=appeal_id)
+    return Message(message="Appeal deleted successfully")
