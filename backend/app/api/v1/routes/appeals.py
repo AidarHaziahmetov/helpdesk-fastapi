@@ -1,8 +1,10 @@
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from sqlmodel import select
 
 from app.api.v1.deps import AsyncSessionDep, CurrentUserAsync
 from app.core.config import settings
@@ -16,9 +18,14 @@ from app.cruds.appeal import (
 )
 from app.models.appeal import Appeal, AppealBase
 from app.models.appeal_file import AppealFile
+from app.models.appeal_status import AppealStatus
 from app.models.common import Message
 from app.utils.bot import send_appeal_updated_message, send_new_appeal_message
-from app.utils.email import send_new_appeal_email, send_new_status_email
+from app.utils.email import (
+    send_new_appeal_email,
+    send_new_status_appeal_email,
+    send_new_status_email,
+)
 
 router = APIRouter(prefix="/appeals", tags=["appeals"])
 
@@ -71,30 +78,22 @@ async def create_new_appeal(
     *,
     session: AsyncSessionDep,
     current_user: CurrentUserAsync,
-    appeal_in: str = Form(...),
-    # files: list[UploadFile] = File(None),
+    appeal_in: AppealBase = Depends(),
+    files: list[UploadFile] = File(None),
 ) -> Any:
     """
     Создать новое обращение.
     """
-    # Добавлено: преобразование JSON-строки в объект AppealBase
-    try:
-        appeal_data = AppealBase.model_validate_json(appeal_in)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail="Invalid appeal data") from e
-
-    # Создаем обращение используя распарсенные данные
     appeal = await create_appeal_async(
         session=session,
         user=current_user,
-        appeal=appeal_data,
+        appeal=appeal_in,
+        files=files,
     )
 
-    # Отправляем уведомления
     try:
         await send_new_appeal_email(appeal=appeal)
     except Exception as e:
-        # Логируем ошибку, но не прерываем выполнение
         print(f"Error sending email: {e}")
 
     try:
@@ -102,16 +101,6 @@ async def create_new_appeal(
     except Exception as e:
         # Логируем ошибку, но не прерываем выполнение
         print(f"Error sending message: {e}")
-
-    # Загружаем файлы
-    # if files:
-    #     for file in files:
-    #         await upload_appeal_files(
-    #             session=session,
-    #             current_user=current_user,
-    #             appeal_id=appeal.id,
-    #             file=file,
-    #         )
 
     return appeal
 
@@ -313,3 +302,57 @@ async def delete_appeal(
     # Удаляем обращение (каскадно удалятся все связанные записи)
     await delete_appeal_async(session=session, appeal_id=appeal_id)
     return Message(message="Appeal deleted successfully")
+
+
+@router.post("/{appeal_id}/close", response_model=Appeal)
+async def close_appeal(
+    *,
+    session: AsyncSessionDep,
+    current_user: CurrentUserAsync,
+    appeal_id: UUID,
+    solving: str,
+) -> Any:
+    """
+    Закрыть обращение
+
+    Только суперпользователи или ответственные за обращение могут его закрыть.
+    При закрытии обновляется статус обращения на "Выполнено" и добавляется решение.
+    """
+    # Проверяем существование обращения
+    appeal = await get_appeal_async(session=session, appeal_id=appeal_id)
+    if not appeal:
+        raise HTTPException(status_code=404, detail="Appeal not found")
+
+    # Проверяем права доступа
+    if not current_user.is_superuser and appeal.responsible_user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+
+    # Получаем статус "Выполнено"
+    if appeal.user.representative.organization.custom_appeal_completion:
+        done_status = (
+            appeal.user.representative.organization.custom_appeal_completion_status
+        )
+    else:
+        done_status = await session.exec(
+            select(AppealStatus).where(AppealStatus.name == "Done")
+        ).first()
+
+    if not done_status:
+        raise HTTPException(status_code=500, detail="Status 'Done' not found")
+
+    # Обновляем обращение
+    appeal.status_id = done_status.id
+    appeal.actual_date = datetime.now(UTC)
+    appeal.solving = solving
+
+    session.add(appeal)
+    await session.commit()
+    await session.refresh(appeal)
+
+    # Отправка уведомлений можно добавить здесь
+    try:
+        await send_new_status_appeal_email(appeal=appeal)
+    except Exception as e:
+        print(f"Error sending email: {e}")
+
+    return appeal

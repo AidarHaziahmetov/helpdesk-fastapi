@@ -46,14 +46,14 @@ class Appeal(AppealBase, table=True):
         back_populates="appeals",
         sa_relationship_kwargs={
             "lazy": "selectin",
-            "primaryjoin": "and_(Appeal.user_id == User.id, Appeal.responsible_user_id != User.id)",
+            "foreign_keys": "[Appeal.user_id]",
         },
     )
     responsible_user: "User" = Relationship(
         back_populates="responsible_appeals",
         sa_relationship_kwargs={
             "lazy": "selectin",
-            "primaryjoin": "and_(Appeal.responsible_user_id == User.id, Appeal.user_id != User.id)",
+            "foreign_keys": "[Appeal.responsible_user_id]",
         },
     )
     region: "Region" = Relationship(

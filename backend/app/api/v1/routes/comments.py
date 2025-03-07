@@ -1,7 +1,7 @@
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from app.api.v1.deps import AsyncSessionDep, CurrentUserAsync
 from app.core.files import get_file_response
@@ -64,7 +64,7 @@ async def create_new_comment(
     session: AsyncSessionDep,
     current_user: CurrentUserAsync,
     appeal_id: UUID,
-    comment_in: CommentBase,
+    comment_in: CommentBase = Depends(),
     files: list[UploadFile] = File(None),  # noqa: UP006
 ) -> Any:
     """

@@ -150,3 +150,16 @@ def send_new_status_email(
     # Используем background_tasks для асинхронной отправки
     message = f"[MOCK] Отправка email об изменении статуса обращения {appeal.id} с {old_status} на {new_status}"
     background_tasks.add_task(print, message)
+
+
+def send_new_status_appeal_email(appeal: Appeal) -> None:
+    """
+    Отправляет email об изменении статуса обращения
+    """
+    if not settings.emails_enabled:
+        return
+
+    project_name = settings.PROJECT_NAME
+    subject = f"{project_name} - Изменение статуса обращения #{appeal.id}"  # noqa: F841
+
+    ...

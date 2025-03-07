@@ -10,6 +10,7 @@ if TYPE_CHECKING:
 
 class AppealStatusBase(SQLModel):
     name: str = Field(max_length=255)
+    name_rus: str | None = None
     description: str | None = None
     is_final: bool = Field(default=False)
     color: str = Field(max_length=7, default="#000000")  # HEX color code

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import HTTPException, UploadFile
@@ -180,10 +180,20 @@ async def create_appeal_async(
     files: list[UploadFile] | None = None,
 ) -> Appeal:
     """Асинхронное создание обращения"""
+    # Получаем начальный статус из базы
+    result = await session.exec(select(AppealStatus).where(AppealStatus.name == "New"))
+    initial_status = result.first()
+    if not initial_status:
+        raise HTTPException(
+            status_code=500,
+            detail="Initial appeal status not found",
+        )
+
     db_appeal = Appeal(
         **appeal.model_dump(),
         user_id=user.id,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
+        status_id=initial_status.id,  # Добавляем status_id
     )
     session.add(db_appeal)
     await session.commit()

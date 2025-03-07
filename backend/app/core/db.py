@@ -2,7 +2,9 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel import Session, create_engine, select
 
 from app.core.config import settings
+from app.cruds.appeal_status import create_appeal_status
 from app.cruds.user import create_user
+from app.models.appeal_status import AppealStatus
 from app.models.user import User, UserCreate
 
 engine = create_engine(str(settings.SQLALCHEMY_DATABASE_URI))
@@ -37,3 +39,10 @@ def init_db(session: Session) -> None:
             is_superuser=True,
         )
         user = create_user(session=session, user_create=user_in)
+    default_appeal_status = session.exec(
+        select(AppealStatus).where(AppealStatus.name == "New")
+    ).first()
+    if not default_appeal_status:
+        create_appeal_status(
+            session=session, appeal_status_in=AppealStatus(name="New", name_rus="Новое")
+        )
